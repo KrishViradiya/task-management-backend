@@ -9,6 +9,8 @@ const authRoutes = require("./src/routes/authRoutes");
 const notificationRoutes = require("./src/routes/notificationRoutes");
 const taskRoutes = require("./src/routes/taskRoutes");
 const adminRoutes = require("./src/routes/adminRoutes");
+const optionsHandler = require("./src/middleware/optionsHandler");
+const corsMiddleware = require("./src/middleware/cors");
 require("dotenv").config();
 
 const app = express();
@@ -22,13 +24,18 @@ const io = new Server(server, {
 });
 const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
-    credentials: true,
-  })
-);
+// CORS middleware
+app.use(cors({
+  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+}));
+
+// Custom CORS and OPTIONS middleware
+app.use(corsMiddleware);
+app.use(optionsHandler);
+
 app.use(express.json());
 app.use(cookieParser());
 
@@ -41,10 +48,10 @@ app.get("/", (req, res) => {
 });
 
 // routes
-app.use("/api/auth", authRoutes);
-app.use("/api/notifications", notificationRoutes);
-app.use("/api/tasks", taskRoutes);
-app.use("/api/admin", adminRoutes);
+app.use("/auth", authRoutes);
+app.use("/notifications", notificationRoutes);
+app.use("/tasks", taskRoutes);
+app.use("/admin", adminRoutes);
 
 // Socket.IO connection handling
 io.on("connection", (socket) => {

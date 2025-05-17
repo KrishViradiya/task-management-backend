@@ -159,6 +159,11 @@ async function sendPendingNotifications(socket, userId) {
 app.set("io", io);
 
 // Start the server
-server.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== "production") {
+  server.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+  });
+}
+
+// For Vercel serverless deployment
+module.exports = app;

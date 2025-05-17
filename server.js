@@ -9,8 +9,6 @@ const authRoutes = require("./src/routes/authRoutes");
 const notificationRoutes = require("./src/routes/notificationRoutes");
 const taskRoutes = require("./src/routes/taskRoutes");
 const adminRoutes = require("./src/routes/adminRoutes");
-const optionsHandler = require("./src/middleware/optionsHandler");
-const corsMiddleware = require("./src/middleware/cors");
 require("dotenv").config();
 
 const app = express();
@@ -24,17 +22,16 @@ const io = new Server(server, {
 });
 const PORT = process.env.PORT || 5000;
 
-// CORS middleware
-app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:3000",
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
-}));
+// Simple CORS configuration
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    credentials: true,
+  })
+);
 
-// Custom CORS and OPTIONS middleware
-app.use(corsMiddleware);
-app.use(optionsHandler);
+// Handle OPTIONS requests
+app.options("*", cors());
 
 app.use(express.json());
 app.use(cookieParser());
@@ -42,12 +39,12 @@ app.use(cookieParser());
 // Connect to MongoDB
 connectDB();
 
-// Routes (to be added)
+// Routes
 app.get("/", (req, res) => {
   res.send("Task Management API is running");
 });
 
-// routes
+// routes - make sure to use simple strings for route paths
 app.use("/auth", authRoutes);
 app.use("/notifications", notificationRoutes);
 app.use("/tasks", taskRoutes);

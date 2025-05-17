@@ -2,6 +2,8 @@
 const Task = require("../models/Task");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
+const notificationService = require("../services/notificationService");
+const { emitTaskUpdate } = require("../utils/socketEvents");
 
 // Create a new task
 exports.createTask = async (req, res) => {
@@ -69,15 +71,13 @@ exports.createTask = async (req, res) => {
     if (assignedTo) {
       const creator = await User.findById(req.userId).select("username");
 
-      const notification = new Notification({
+      await notificationService.createNotification(req, {
         recipient: assignedTo,
         sender: req.userId,
         task: newTask._id,
         type: "task_assigned",
         message: `${creator.username} assigned you a new task: ${title}`,
       });
-
-      await notification.save();
     }
 
     // Create notifications for collaborators
@@ -92,7 +92,7 @@ exports.createTask = async (req, res) => {
         message: `${creator.username} added you as a collaborator on task: ${title}`,
       }));
 
-      await Notification.insertMany(notifications);
+      await notificationService.createManyNotifications(req, notifications);
     }
 
     // Return the task with populated fields
@@ -139,6 +139,35 @@ exports.getAllTasks = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Error fetching tasks",
+      error: error.message,
+    });
+  }
+};
+
+// Get all tasks in the system (admin/manager only)
+exports.getAllTasksAdmin = async (req, res) => {
+  try {
+    // Get the current user to check their role
+    const user = await User.findById(req.userId);
+    
+    // Only admins and managers can access all tasks
+    if (!user || (user.role !== 'admin' && user.role !== 'manager')) {
+      return res.status(403).json({
+        message: "Access denied. You do not have permission to view all tasks."
+      });
+    }
+    
+    // Find all tasks in the system
+    const tasks = await Task.find()
+      .populate("createdBy", "username email")
+      .populate("assignedTo", "username email")
+      .populate("collaborators", "username email")
+      .sort({ createdAt: -1 });
+
+    res.json(tasks);
+  } catch (error) {
+    res.status(500).json({
+      message: "Error fetching all tasks",
       error: error.message,
     });
   }
@@ -204,11 +233,16 @@ exports.updateTask = async (req, res) => {
     const isCollaborator =
       task.collaborators &&
       task.collaborators.some((collab) => collab.toString() === req.userId);
-
+    
+    // Get user to check for special permissions
+    const user = await User.findById(req.userId);
+    const hasUpdateAnyPermission = user && (user.role === 'admin' || user.permissions.updateAnyTask);
+    
     if (
       task.createdBy.toString() !== req.userId &&
       task.assignedTo?.toString() !== req.userId &&
-      !isCollaborator
+      !isCollaborator &&
+      !hasUpdateAnyPermission
     ) {
       return res
         .status(403)
@@ -219,7 +253,7 @@ exports.updateTask = async (req, res) => {
     if (assignedTo && task.assignedTo?.toString() !== assignedTo) {
       const creator = await User.findById(req.userId).select("username");
 
-      const notification = new Notification({
+      await notificationService.createNotification(req, {
         recipient: assignedTo,
         sender: req.userId,
         task: task._id,
@@ -228,8 +262,6 @@ exports.updateTask = async (req, res) => {
           title || task.title
         }`,
       });
-
-      await notification.save();
     }
 
     // Update task
@@ -244,8 +276,9 @@ exports.updateTask = async (req, res) => {
     if (priority) updateData.priority = priority;
     if (status) updateData.status = status;
 
-    // Only the creator can change assignment and collaborators
-    if (task.createdBy.toString() === req.userId) {
+    // Only the creator or users with special permissions can change assignment and collaborators
+    if (task.createdBy.toString() === req.userId || hasUpdateAnyPermission || 
+        (user && user.permissions.assignTask)) {
       if (assignedTo) updateData.assignedTo = assignedTo;
       if (collaborators) updateData.collaborators = collaborators;
     }
@@ -258,6 +291,18 @@ exports.updateTask = async (req, res) => {
       .populate("createdBy", "username")
       .populate("assignedTo", "username")
       .populate("collaborators", "username email");
+    
+    // Emit task update to all collaborators
+    const io = req.app.get('io');
+    if (io) {
+      const allCollaborators = [
+        ...updatedTask.collaborators.map(c => c._id.toString()), 
+        updatedTask.assignedTo?._id.toString(),
+        updatedTask.createdBy._id.toString()
+      ].filter(Boolean);
+      
+      emitTaskUpdate(io, allCollaborators, updatedTask);
+    }
 
     res.json(updatedTask);
   } catch (error) {
@@ -279,7 +324,11 @@ exports.deleteTask = async (req, res) => {
     }
 
     // Check if user has permission to delete this task
-    if (task.createdBy.toString() !== req.userId) {
+    // Get user to check for special permissions
+    const user = await User.findById(req.userId);
+    const hasDeleteAnyPermission = user && (user.role === 'admin' || user.permissions.deleteAnyTask);
+    
+    if (task.createdBy.toString() !== req.userId && !hasDeleteAnyPermission) {
       return res
         .status(403)
         .json({ message: "Not authorized to delete this task" });
@@ -470,15 +519,20 @@ exports.inviteCollaborator = async (req, res) => {
     // Create notification for the invited user
     const inviter = await User.findById(req.userId).select("username");
 
-    const notification = new Notification({
+    await notificationService.createNotification(req, {
       recipient: user._id,
       sender: req.userId,
       task: task._id,
       type: "task_assigned",
       message: `${inviter.username} invited you to collaborate on task: ${task.title}`,
     });
-
-    await notification.save();
+    
+    // Emit task update to all collaborators
+    const io = req.app.get('io');
+    if (io) {
+      const allCollaborators = [...task.collaborators.map(c => c.toString()), task.assignedTo?.toString()].filter(Boolean);
+      emitTaskUpdate(io, allCollaborators, task);
+    }
 
     // Return updated task with populated fields
     const updatedTask = await Task.findById(taskId)

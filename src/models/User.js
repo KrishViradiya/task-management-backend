@@ -22,6 +22,19 @@ const userSchema = new mongoose.Schema({
     required: true,
     minlength: 6
   },
+  role: {
+    type: String,
+    enum: ['admin', 'manager', 'user'],
+    default: 'user'
+  },
+  permissions: {
+    createTask: { type: Boolean, default: true },
+    updateAnyTask: { type: Boolean, default: false },
+    deleteAnyTask: { type: Boolean, default: false },
+    assignTask: { type: Boolean, default: false },
+    viewAllTasks: { type: Boolean, default: false },
+    manageUsers: { type: Boolean, default: false }
+  },
   createdAt: {
     type: Date,
     default: Date.now

@@ -1,66 +1,71 @@
 // backend/src/controllers/authController.js
-const User = require('../models/User');
-const jwt = require('jsonwebtoken');
+const User = require("../models/User");
+const jwt = require("jsonwebtoken");
+const { setDefaultPermissions } = require("../middleware/rbacMiddleware");
 
 // Cookie options
 const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
   maxAge: 24 * 60 * 60 * 1000, // 24 hours
-  path: '/'
+  path: "/",
 };
 
 // Register a new user
 exports.register = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
-    
+    const { username, email, password, role } = req.body;
+
     // Check if user already exists
-    const existingUser = await User.findOne({ 
-      $or: [{ email }, { username }] 
+    const existingUser = await User.findOne({
+      $or: [{ email }, { username }],
     });
-    
+
     if (existingUser) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'User with this email or username already exists' 
+        message: "User with this email or username already exists",
       });
     }
-    
-    // Create new user
+
+    // Create new user with default role of 'user' if not specified
     const newUser = new User({
       username,
       email,
-      password
+      password,
+      role: role || "user",
     });
-    
+
+    // Set default permissions based on role
+    setDefaultPermissions(newUser);
+
     await newUser.save();
-    
+
     // Generate JWT token
-    const token = jwt.sign(
-      { id: newUser._id }, 
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-    
+    const token = jwt.sign({ id: newUser._id }, process.env.JWT_SECRET, {
+      expiresIn: "24h",
+    });
+
     // Set token in cookie
-    res.cookie('token', token, cookieOptions);
-    
+    res.cookie("token", token, cookieOptions);
+
     res.status(201).json({
       success: true,
       token,
       user: {
         id: newUser._id,
         username: newUser.username,
-        email: newUser.email
-      }
+        email: newUser.email,
+        role: newUser.role,
+        permissions: newUser.permissions,
+      },
     });
   } catch (error) {
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: 'Error registering user', 
-      error: error.message 
+      message: "Error registering user",
+      error: error.message,
     });
   }
 };
@@ -69,51 +74,51 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    
+
     // Find user by email
     const user = await User.findOne({ email });
-    
+
     if (!user) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false,
-        message: 'Invalid credentials' 
+        message: "Invalid credentials",
       });
     }
-    
+
     // Check password
     const isPasswordValid = await user.comparePassword(password);
-    
+
     if (!isPasswordValid) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false,
-        message: 'Invalid credentials' 
+        message: "Invalid credentials",
       });
     }
-    
+
     // Generate JWT token
-    const token = jwt.sign(
-      { id: user._id }, 
-      process.env.JWT_SECRET, 
-      { expiresIn: '24h' }
-    );
-    
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "24h",
+    });
+
     // Set token in cookie
-    res.cookie('token', token, cookieOptions);
-    
+    res.cookie("token", token, cookieOptions);
+
     res.json({
       success: true,
       token,
       user: {
         id: user._id,
         username: user.username,
-        email: user.email
-      }
+        email: user.email,
+        role: user.role,
+        permissions: user.permissions,
+      },
     });
   } catch (error) {
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: 'Error logging in', 
-      error: error.message 
+      message: "Error logging in",
+      error: error.message,
     });
   }
 };
@@ -121,29 +126,31 @@ exports.login = async (req, res) => {
 // Get current user
 exports.getCurrentUser = async (req, res) => {
   try {
-    const user = await User.findById(req.userId).select('-password');
-    
+    const user = await User.findById(req.userId).select("-password");
+
     if (!user) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'User not found' 
+        message: "User not found",
       });
     }
-    
+
     res.json({
       success: true,
       user: {
         id: user._id,
         username: user.username,
         email: user.email,
-        createdAt: user.createdAt
-      }
+        role: user.role,
+        permissions: user.permissions,
+        createdAt: user.createdAt,
+      },
     });
   } catch (error) {
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: 'Error fetching user data', 
-      error: error.message 
+      message: "Error fetching user data",
+      error: error.message,
     });
   }
 };
@@ -152,22 +159,22 @@ exports.getCurrentUser = async (req, res) => {
 exports.logout = (req, res) => {
   try {
     // Clear the cookie
-    res.clearCookie('token', {
+    res.clearCookie("token", {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      path: '/'
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      path: "/",
     });
-    
+
     res.status(200).json({
       success: true,
-      message: 'Logged out successfully'
+      message: "Logged out successfully",
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error logging out',
-      error: error.message
+      message: "Error logging out",
+      error: error.message,
     });
   }
 };

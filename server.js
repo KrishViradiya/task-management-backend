@@ -15,23 +15,46 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: [
+      process.env.FRONTEND_URL || "http://localhost:3000",
+      "https://task-management-frontend-beta-ivory.vercel.app",
+    ],
     methods: ["GET", "POST"],
     credentials: true,
   },
 });
 const PORT = process.env.PORT || 5000;
 
-// Simple CORS configuration
+// Enhanced CORS configuration for deployment
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: [
+      process.env.FRONTEND_URL || "http://localhost:3000",
+      "https://task-management-frontend-beta-ivory.vercel.app",
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
 // Handle OPTIONS requests
 app.options("*", cors());
+
+// Add a middleware to ensure CORS headers are set for all responses
+app.use((req, res, next) => {
+  res.header(
+    "Access-Control-Allow-Origin",
+    "https://task-management-frontend-beta-ivory.vercel.app"
+  );
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+  );
+  res.header("Access-Control-Allow-Credentials", "true");
+  next();
+});
 
 app.use(express.json());
 app.use(cookieParser());

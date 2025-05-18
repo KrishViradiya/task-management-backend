@@ -26,17 +26,21 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 5000;
 
 // Enhanced CORS configuration for deployment
-app.use(
-  cors({
-    origin: [
-      process.env.FRONTEND_URL || "http://localhost:3000",
+app.use(cors({
+  origin: (origin, callback) => {
+    const allowedOrigins = [
       "https://task-management-frontend-beta-ivory.vercel.app",
-    ],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+      "http://localhost:3000"
+    ];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  credentials: true
+}));
 
 // Handle OPTIONS requests
 app.options("*", cors());

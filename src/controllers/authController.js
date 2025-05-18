@@ -6,10 +6,11 @@ const { setDefaultPermissions } = require("../middleware/rbacMiddleware");
 // Cookie options
 const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  secure: true, // Always use secure cookies for cross-domain
+  sameSite: "none", // Required for cross-site cookies
   maxAge: 24 * 60 * 60 * 1000, // 24 hours
   path: "/",
+  domain: process.env.NODE_ENV === "production" ? ".vercel.app" : undefined, // Allow sharing across subdomains
 };
 
 // Register a new user
@@ -158,12 +159,13 @@ exports.getCurrentUser = async (req, res) => {
 // Logout user
 exports.logout = (req, res) => {
   try {
-    // Clear the cookie
+    // Clear the cookie with the same settings as when setting it
     res.clearCookie("token", {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      secure: true,
+      sameSite: "none",
       path: "/",
+      domain: process.env.NODE_ENV === "production" ? ".vercel.app" : undefined,
     });
 
     res.status(200).json({

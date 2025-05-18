@@ -43,10 +43,27 @@ app.options("*", cors());
 
 // Add a middleware to ensure CORS headers are set for all responses
 app.use((req, res, next) => {
-  res.header(
-    "Access-Control-Allow-Origin",
-    "https://task-management-frontend-beta-ivory.vercel.app"
-  );
+  // Set the specific origin that's making the request
+  const origin = req.headers.origin;
+  if (origin === "https://task-management-frontend-beta-ivory.vercel.app") {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
+
+  // Handle preflight OPTIONS requests specially
+  if (req.method === "OPTIONS") {
+    res.header(
+      "Access-Control-Allow-Methods",
+      "GET, POST, PUT, DELETE, OPTIONS"
+    );
+    res.header(
+      "Access-Control-Allow-Headers",
+      "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+    );
+    res.header("Access-Control-Allow-Credentials", "true");
+    res.header("Access-Control-Max-Age", "86400"); // 24 hours
+    return res.status(204).end();
+  }
+
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   res.header(
     "Access-Control-Allow-Headers",
@@ -65,6 +82,16 @@ connectDB();
 // Routes
 app.get("/", (req, res) => {
   res.send("Task Management API is running");
+});
+
+// CORS test endpoint
+app.get("/cors-test", (req, res) => {
+  res.json({
+    success: true,
+    message: "CORS is working correctly",
+    origin: req.headers.origin || "No origin header",
+    headers: req.headers,
+  });
 });
 
 // routes - make sure to use simple strings for route paths
@@ -190,7 +217,14 @@ if (process.env.NODE_ENV !== "production") {
   server.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
   });
+} else {
+  // For production, still start the server
+  server.listen(PORT, () => {
+    console.log(`Server is running in production mode on port ${PORT}`);
+  });
 }
 
 // For Vercel serverless deployment
 module.exports = app;
+// Also export the server for Vercel
+module.exports.server = server;
